@@ -7,6 +7,7 @@
 // information.
 //
 
+//TODO: wasi random number generator
 #include "pdfio-private.h"
 #if _WIN32
 #  include <windows.h>
@@ -18,7 +19,7 @@
 #endif // _WIN32
 #ifdef __has_include
 #  if __has_include(<sys/random.h>)
-#    define HAVE_GETRANDOM 1
+#    define HAVE_GETRANDOM 0
 #    include <sys/random.h>
 #  endif // __has_include(<sys/random.h>)
 #endif // __has_include

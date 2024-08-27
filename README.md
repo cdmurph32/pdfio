@@ -68,6 +68,14 @@ To install it, run:
 
     sudo make install
 
+Building for WASI/Wasm
+-----------------
+
+Wasm only support static libraries
+
+    AR=/opt/wasi-sdk/bin/ar CC=/opt/wasi-sdk/bin/clang CFLAGS="-O2" ./configure --host=wasm32-wasi
+
+    make libpdfio.a
 
 Visual Studio Project
 ---------------------

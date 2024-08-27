@@ -207,6 +207,7 @@ extern const char	*pdfioFileGetSubject(pdfio_file_t *pdf) _PDFIO_PUBLIC;
 extern const char	*pdfioFileGetTitle(pdfio_file_t *pdf) _PDFIO_PUBLIC;
 extern const char	*pdfioFileGetVersion(pdfio_file_t *pdf) _PDFIO_PUBLIC;
 extern pdfio_file_t	*pdfioFileOpen(const char *filename, pdfio_password_cb_t password_cb, void *password_data, pdfio_error_cb_t error_cb, void *error_data) _PDFIO_PUBLIC;
+extern pdfio_file_t	*pdfioMemFileOpen(const int fd, pdfio_password_cb_t password_cb, void *password_data, pdfio_error_cb_t error_cb, void *error_data) _PDFIO_PUBLIC;
 extern void		pdfioFileSetAuthor(pdfio_file_t *pdf, const char *value) _PDFIO_PUBLIC;
 extern void		pdfioFileSetCreationDate(pdfio_file_t *pdf, time_t value) _PDFIO_PUBLIC;
 extern void		pdfioFileSetCreator(pdfio_file_t *pdf, const char *value) _PDFIO_PUBLIC;

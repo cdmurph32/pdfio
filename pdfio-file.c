@@ -895,6 +895,128 @@ pdfioFileGetVersion(
 
 
 //
+// 'pdfioMemFileOpen()' - Open a PDF file for reading.
+//
+// This function opens an existing PDF file.  The "filename" argument specifies
+// the name of the PDF file to create.
+//
+// The "password_cb" and "password_cbdata" arguments specify a password callback
+// and its data pointer for PDF files that use one of the standard Adobe
+// "security" handlers.  The callback returns a password string or `NULL` to
+// cancel the open.  If `NULL` is specified for the callback function and the
+// PDF file requires a password, the open will always fail.
+//
+// The "error_cb" and "error_cbdata" arguments specify an error handler callback
+// and its data pointer - if `NULL` the default error handler is used that
+// writes error messages to `stderr`.
+//
+
+pdfio_file_t *				// O - PDF file
+pdfioMemFileOpen(
+    const int           fd,             // I - File Descriptor
+    pdfio_password_cb_t password_cb,	// I - Password callback or `NULL` for none
+    void                *password_cbdata,
+					// I - Password callback data, if any
+    pdfio_error_cb_t    error_cb,	// I - Error callback or `NULL` for default
+    void                *error_cbdata)	// I - Error callback data, if any
+{
+  pdfio_file_t	*pdf;			// PDF file
+  char		line[1025],		// Line from file
+		*ptr,			// Pointer into line
+		*end;			// End of line
+  ssize_t	bytes;			// Bytes read
+  off_t		xref_offset;		// Offset to xref table
+
+
+  if(fd < 0)
+    return NULL;
+
+  if (!error_cb)
+  {
+    error_cb     = _pdfioFileDefaultError;
+    error_cbdata = NULL;
+  }
+
+  // Allocate a PDF file structure...
+  if ((pdf = (pdfio_file_t *)calloc(1, sizeof(pdfio_file_t))) == NULL)
+  {
+    pdfio_file_t temp;			// Dummy file
+    char	message[8192];		// Message string
+
+    temp.filename = (char *)"pdfioMemFileOpen";
+    snprintf(message, sizeof(message), "Unable to allocate memory for PDF file - %s", strerror(errno));
+    (error_cb)(&temp, message, error_cbdata);
+    return (NULL);
+  }
+
+  pdf->loc         = get_lconv();
+  pdf->mode        = _PDFIO_MODE_READ;
+  pdf->error_cb    = error_cb;
+  pdf->error_data  = error_cbdata;
+  pdf->permissions = PDFIO_PERMISSION_ALL;
+  pdf->fd          = fd;
+
+  // Read the header from the first line...
+  if (!_pdfioFileGets(pdf, line, sizeof(line)))
+    goto error;
+
+  if ((strncmp(line, "%PDF-1.", 7) && strncmp(line, "%PDF-2.", 7)) || !isdigit(line[7] & 255))
+  {
+    // Bad header
+    _pdfioFileError(pdf, "Bad header '%s'.", line);
+    goto error;
+  }
+
+  // Copy the version number...
+  pdf->version = strdup(line + 5);
+
+  // Grab the last 1k of the file to find the start of the xref table...
+  if (_pdfioFileSeek(pdf, -1024, SEEK_END) < 0)
+  {
+    _pdfioFileError(pdf, "Unable to read startxref data.");
+    goto error;
+  }
+
+  if ((bytes = _pdfioFileRead(pdf, line, sizeof(line) - 1)) < 1)
+  {
+    _pdfioFileError(pdf, "Unable to read startxref data.");
+    goto error;
+  }
+
+  line[bytes] = '\0';
+  end = line + bytes - 9;
+
+  for (ptr = line; ptr < end; ptr ++)
+  {
+    if (!memcmp(ptr, "startxref", 9))
+      break;
+  }
+
+  if (ptr >= end)
+  {
+    _pdfioFileError(pdf, "Unable to find start of xref table.");
+    goto error;
+  }
+
+  xref_offset = (off_t)strtol(ptr + 9, NULL, 10);
+
+  if (!load_xref(pdf, xref_offset, password_cb, password_cbdata))
+    goto error;
+
+  return (pdf);
+
+
+  // If we get here we had a fatal read error...
+  error:
+
+  pdfioFileClose(pdf);
+
+  return (NULL);
+}
+
+
+
+//
 // 'pdfioFileOpen()' - Open a PDF file for reading.
 //
 // This function opens an existing PDF file.  The "filename" argument specifies
