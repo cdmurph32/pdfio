@@ -248,11 +248,15 @@ struct _pdfio_file_s			// PDF file structure
 		user_keylen;		// Length of user encryption key
 
   // Active file data
-  int		fd;			// File descriptor
-  char		buffer[8192],		// Read/write buffer
+  int		fd;			// File descriptor, 0 for in memory pdf
+  char		buffer[8192],		// Read/write buffer for file pdf
 		*bufptr,		// Pointer into buffer
 		*bufend;		// End of buffer
   off_t		bufpos;			// Position in file for start of buffer
+  // In memory pdf data
+  char		*data_ptr,		// Pointer into in-memory pdf
+		*data,			// Pointer to in-memory pdf
+		*data_end;		// End of in-memory pdf
   pdfio_dict_t	*trailer_dict;		// Trailer dictionary
   pdfio_obj_t	*root_obj;		// Root object/dictionary
   pdfio_obj_t	*info_obj;		// Information object

@@ -895,7 +895,7 @@ pdfioFileGetVersion(
 
 
 //
-// 'pdfioMemFileOpen()' - Open a PDF file for reading.
+// 'pdfioMemBufOpen()' - Instantiate a pdf from a buffer.
 //
 // This function opens an existing PDF file.  The "filename" argument specifies
 // the name of the PDF file to create.
@@ -912,8 +912,9 @@ pdfioFileGetVersion(
 //
 
 pdfio_file_t *				// O - PDF file
-pdfioMemFileOpen(
-    const int           fd,             // I - File Descriptor
+pdfioMemBufOpen(
+    char *bufptr,
+    size_t len,
     pdfio_password_cb_t password_cb,	// I - Password callback or `NULL` for none
     void                *password_cbdata,
 					// I - Password callback data, if any
@@ -928,9 +929,6 @@ pdfioMemFileOpen(
   off_t		xref_offset;		// Offset to xref table
 
 
-  if(fd < 0)
-    return NULL;
-
   if (!error_cb)
   {
     error_cb     = _pdfioFileDefaultError;
@@ -943,18 +941,20 @@ pdfioMemFileOpen(
     pdfio_file_t temp;			// Dummy file
     char	message[8192];		// Message string
 
-    temp.filename = (char *)"pdfioMemFileOpen";
+    temp.filename = (char *)"pdfioMemBufOpen";
     snprintf(message, sizeof(message), "Unable to allocate memory for PDF file - %s", strerror(errno));
     (error_cb)(&temp, message, error_cbdata);
     return (NULL);
   }
 
+  pdf->fd          = 0; // fd value of zero signifies there is no file.
   pdf->loc         = get_lconv();
   pdf->mode        = _PDFIO_MODE_READ;
   pdf->error_cb    = error_cb;
   pdf->error_data  = error_cbdata;
   pdf->permissions = PDFIO_PERMISSION_ALL;
-  pdf->fd          = fd;
+  pdf->bufptr      = bufptr;
+  pdf->bufend      = bufptr + len;
 
   // Read the header from the first line...
   if (!_pdfioFileGets(pdf, line, sizeof(line)))
@@ -1892,7 +1892,7 @@ load_xref(
 
       for (index_n = 0; index_n < index_count; index_n += 2)
       {
-        if (index_count == 1)
+	if (index_count == 1)
         {
           number = 0;
           count  = 999999999;
