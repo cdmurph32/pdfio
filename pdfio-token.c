@@ -210,8 +210,6 @@ _pdfioTokenRead(_pdfio_token_t *tb,	// I - Token buffer/stack
   bool	saw_nul = false;		// Did we see a nul character?
   size_t count = 0;			// Number of whitespace/comment bytes
 
-
-
   // "state" is:
   //
   // - '\0' for idle
@@ -288,7 +286,7 @@ _pdfioTokenRead(_pdfio_token_t *tb,	// I - Token buffer/stack
     *bufptr++ = (char)ch;
   }
 
-  PDFIO_DEBUG("_pdfioTokenRead: state='%c'\n", state);
+  printf("_pdfioTokenRead: state='%c'\n", state);
 
   switch (state)
   {

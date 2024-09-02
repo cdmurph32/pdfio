@@ -8,6 +8,7 @@
 //
 
 #include "pdfio-private.h"
+#include <stdio.h>
 #ifndef O_BINARY
 #  define O_BINARY 0
 #endif // !O_BINARY
@@ -913,7 +914,7 @@ pdfioFileGetVersion(
 
 pdfio_file_t *				// O - PDF file
 pdfioMemBufOpen(
-    char *bufptr,
+    char *data,
     size_t len,
     pdfio_password_cb_t password_cb,	// I - Password callback or `NULL` for none
     void                *password_cbdata,
@@ -953,12 +954,15 @@ pdfioMemBufOpen(
   pdf->error_cb    = error_cb;
   pdf->error_data  = error_cbdata;
   pdf->permissions = PDFIO_PERMISSION_ALL;
-  pdf->bufptr      = bufptr;
-  pdf->bufend      = bufptr + len;
+  pdf->data_end    = data + len;
+
+  pdf->data = pdf->data_ptr = data;
 
   // Read the header from the first line...
   if (!_pdfioFileGets(pdf, line, sizeof(line)))
+  {
     goto error;
+  }
 
   if ((strncmp(line, "%PDF-1.", 7) && strncmp(line, "%PDF-2.", 7)) || !isdigit(line[7] & 255))
   {
@@ -999,6 +1003,7 @@ pdfioMemBufOpen(
   }
 
   xref_offset = (off_t)strtol(ptr + 9, NULL, 10);
+  printf("Xref Offset %lu\n", xref_offset);
 
   if (!load_xref(pdf, xref_offset, password_cb, password_cbdata))
     goto error;
@@ -1015,8 +1020,6 @@ pdfioMemBufOpen(
 }
 
 
-
-//
 // 'pdfioFileOpen()' - Open a PDF file for reading.
 //
 // This function opens an existing PDF file.  The "filename" argument specifies
@@ -1131,6 +1134,8 @@ pdfioFileOpen(
   }
 
   xref_offset = (off_t)strtol(ptr + 9, NULL, 10);
+  printf("Ptr position %lu\n", (ptr - line));
+  printf("Xref Offset %lu\n", xref_offset);
 
   if (!load_xref(pdf, xref_offset, password_cb, password_cbdata))
     goto error;
@@ -1774,7 +1779,7 @@ load_xref(
     }
     while (!line[0]);
 
-    PDFIO_DEBUG("load_xref: line_offset=%lu, line='%s'\n", (unsigned long)line_offset, line);
+    printf("load_xref: line_offset=%lu, line='%s'\n", (unsigned long)line_offset, line);
 
     if (isdigit(line[0] & 255) && strlen(line) > 4 && (!strcmp(line + strlen(line) - 4, " obj") || ((ptr = strstr(line, " obj")) != NULL && ptr[4] == '<')))
     {
@@ -1892,7 +1897,7 @@ load_xref(
 
       for (index_n = 0; index_n < index_count; index_n += 2)
       {
-	if (index_count == 1)
+        if (index_count == 1)
         {
           number = 0;
           count  = 999999999;
@@ -2045,10 +2050,10 @@ load_xref(
       off_t trailer_offset = _pdfioFileTell(pdf);
 					// Offset of current line
 
-      PDFIO_DEBUG("load_xref: Reading xref table starting at offset %lu\n", (unsigned long)trailer_offset);
+      printf("load_xref: Reading xref table starting at offset %lu\n", (unsigned long)trailer_offset);
       while (_pdfioFileGets(pdf, line, sizeof(line)))
       {
-        PDFIO_DEBUG("load_xref: '%s' at offset %lu\n", line, (unsigned long)trailer_offset);
+        printf("load_xref: '%s' at offset %lu\n", line, (unsigned long)trailer_offset);
 
 	if (!strncmp(line, "trailer", 7) && (!line[7] || isspace(line[7] & 255)))
 	{
@@ -2138,6 +2143,7 @@ load_xref(
       }
 
       _pdfioTokenInit(&tb, pdf, (_pdfio_tconsume_cb_t)_pdfioFileConsume, (_pdfio_tpeek_cb_t)_pdfioFilePeek, pdf);
+      printf("Token: %s\n", *tb.tokens);
 
       if (!_pdfioValueRead(pdf, NULL, &tb, &trailer, 0))
       {

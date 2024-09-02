@@ -28,6 +28,7 @@
 
 static int	do_crypto_tests(void);
 static int	do_test_file(const char *filename, int objnum, const char *password, bool verbose);
+static int	do_in_memory_test_file(const char *filename, int objnum, const char *password, bool verbose);
 static int	do_unit_tests(void);
 static int	draw_image(pdfio_stream_t *st, const char *name, double x, double y, double w, double h, const char *label);
 static bool	error_cb(pdfio_file_t *pdf, const char *message, bool *error);
@@ -100,12 +101,12 @@ main(int  argc,				// I - Number of command-line arguments
       else if ((i + 1) < argc && isdigit(argv[i + 1][0] & 255))
       {
         // filename.pdf object-number
-        if (do_test_file(argv[i], atoi(argv[i + 1]), password, verbose))
+        if (do_in_memory_test_file(argv[i], atoi(argv[i + 1]), password, verbose))
 	  ret = 1;
 
 	i ++;
       }
-      else if (do_test_file(argv[i], 0, password, verbose))
+      else if (do_in_memory_test_file(argv[i], 0, password, verbose))
       {
         ret = 1;
       }
@@ -505,6 +506,264 @@ do_test_file(const char *filename,	// I - PDF filename
   }
 }
 
+//
+// 'do_in_memory_test_file()' - Try loading a PDF file from a buffer and listing pages and objects.
+//
+
+static int				// O - Exit status
+do_in_memory_test_file(const char *filename,	// I - PDF filename
+             int        objnum,		// I - Object number to dump, if any
+             const char *password,	// I - Password for file
+             bool       verbose)	// I - Be verbose?
+{
+  bool		error = false;		// Have we shown an error yet?
+  pdfio_file_t	*pdf;			// PDF file
+  size_t	n,			// Object/page index
+		num_objs,		// Number of objects
+		num_pages;		// Number of pages
+  pdfio_obj_t	*obj;			// Object
+  pdfio_dict_t	*dict;			// Object dictionary
+  FILE          *pdf_file;         // In memory PDF
+  size_t        pdf_file_size;     // In memory PDF size
+  char          *buffer;                // In memory PDF buffer
+
+
+  // Try opening the file...
+  if (!objnum)
+  {
+    printf("%s from memory: ", filename);
+    fflush(stdout);
+  }
+
+  // Read file into memory
+  pdf_file = fopen(filename, "r"); 
+  fseek(pdf_file, 0, SEEK_END);
+  pdf_file_size = ftell(pdf_file);
+  fseek(pdf_file, 0, SEEK_SET);
+  buffer = malloc(pdf_file_size + 1);
+
+  // Read file content into buffer
+  size_t read_size = fread(buffer, 1, pdf_file_size, pdf_file);
+  if (read_size != pdf_file_size) {
+      perror("In memory file read failed");
+      free(buffer);
+      fclose(pdf_file);
+      return 1;
+  }
+
+  buffer[pdf_file_size] = '\0';
+
+  printf("file size %ld\n", pdf_file_size);
+
+  // Close the file
+  fclose(pdf_file);
+
+  if ((pdf = pdfioMemBufOpen(buffer, pdf_file_size, password_cb, (void *)password, (pdfio_error_cb_t)error_cb, &error)) != NULL)
+  {
+    if (objnum)
+    {
+      const char	*filter;	// Stream filter
+      pdfio_stream_t	*st;		// Stream
+      char		buffer[8192];	// Read buffer
+      ssize_t		bytes;		// Bytes read
+
+      if ((obj = pdfioFileFindObj(pdf, (size_t)objnum)) == NULL)
+      {
+        puts("Not found.");
+        return (1);
+      }
+
+      if ((dict = pdfioObjGetDict(obj)) == NULL)
+      {
+        _pdfioValueDebug(&obj->value, stdout);
+	putchar('\n');
+        return (0);
+      }
+
+      filter = pdfioDictGetName(dict, "Filter");
+
+      if ((st = pdfioObjOpenStream(obj, filter && !strcmp(filter, "FlateDecode"))) == NULL)
+      {
+        _pdfioValueDebug(&obj->value, stdout);
+	putchar('\n');
+        return (0);
+      }
+
+      while ((bytes = pdfioStreamRead(st, buffer, sizeof(buffer))) > 0)
+        fwrite(buffer, 1, (size_t)bytes, stdout);
+
+      pdfioStreamClose(st);
+
+      return (0);
+    }
+    else
+    {
+      puts("PASS");
+
+      // Show basic stats...
+      num_objs  = pdfioFileGetNumObjs(pdf);
+      num_pages = pdfioFileGetNumPages(pdf);
+
+      printf("    PDF %s, %d pages, %d objects.\n", pdfioFileGetVersion(pdf), (int)num_pages, (int)num_objs);
+
+      if (verbose)
+      {
+	// Show a summary of each page...
+	for (n = 0; n < num_pages; n ++)
+	{
+	  if ((obj = pdfioFileGetPage(pdf, n)) == NULL)
+	  {
+	    printf("%s: Unable to get page #%d.\n", filename, (int)n + 1);
+	  }
+	  else
+	  {
+	    pdfio_rect_t media_box;	// MediaBox value
+
+	    memset(&media_box, 0, sizeof(media_box));
+	    dict = pdfioObjGetDict(obj);
+
+	    if (!pdfioDictGetRect(dict, "MediaBox", &media_box))
+	    {
+	      if ((obj = pdfioDictGetObj(dict, "Parent")) != NULL)
+	      {
+		dict = pdfioObjGetDict(obj);
+		pdfioDictGetRect(dict, "MediaBox", &media_box);
+	      }
+	    }
+
+	    printf("    Page #%d (obj %d) is %gx%g.\n", (int)n + 1, (int)pdfioObjGetNumber(obj), media_box.x2, media_box.y2);
+	  }
+	}
+
+	// Show the associated value with each object...
+	for (n = 0; n < num_objs; n ++)
+	{
+	  if ((obj = pdfioFileGetObj(pdf, n)) == NULL)
+	  {
+	    printf("    Unable to get object #%d.\n", (int)n);
+	  }
+	  else
+	  {
+	    dict = pdfioObjGetDict(obj);
+
+	    printf("    %u %u obj dict=%p(%lu pairs)\n", (unsigned)pdfioObjGetNumber(obj), (unsigned)pdfioObjGetGeneration(obj), dict, dict ? (unsigned long)dict->num_pairs : 0UL);
+	    fputs("        ", stdout);
+	    _pdfioValueDebug(&obj->value, stdout);
+	    putchar('\n');
+	  }
+	}
+      }
+    }
+
+    // Close the file and return success...
+    pdfioFileClose(pdf);
+    return (0);
+  }
+  else
+  {
+    // Error message will already be displayed so just indicate failure...
+    return (1);
+  }
+}
+
+static int
+lseek_mem_test(void)
+{
+  char test_data[] = "This is test data for PDF";
+  size_t data_len = strlen(test_data);
+  pdfio_file_t pdf;
+  uint result;
+  pdf.data = (char *)test_data;
+  pdf.data_ptr = pdf.data;
+  pdf.data_end = pdf.data + data_len;
+
+  // Test SEEK_SET
+  result = lseek_mem(&pdf, 5, SEEK_SET);
+  if(result != 5)
+  {
+    printf("Failed SEEK_SET, expected offset of 5, got %d", result);
+    return (1);
+  }
+
+  if(pdf.data + 5 != pdf.data_ptr)
+  {
+    printf("Failed SEEK_SET, expected data_ptr value of %lu", (size_t)pdf.data_ptr);
+    return (1);
+  }
+
+  // Test SEEK_SET beyond end
+  result = lseek_mem(&pdf, data_len + 10, SEEK_SET);
+  if(data_len != result)
+  {
+    printf("Failed SEEK_SET beyond end of data, expected %lu, got %d", data_len, result);
+    return (1);
+  };
+
+  if(pdf.data_end != pdf.data_ptr)
+  {
+    printf("Failed SEEK_SET beyond end of data, expected data_ptr value of%lu, got %lu", (size_t)pdf.data_end, (size_t)pdf.data_ptr);
+    return (1);
+  };
+
+  // Test SEEK_CUR
+  pdf.data_ptr = pdf.data + 10;
+  result = lseek_mem(&pdf, 5, SEEK_CUR);
+  if(15 != result)
+  {
+    printf("Failed SEEK_CUR, expected offset of 15, got %d", result);
+    return (1);
+  };
+
+  if(pdf.data + 15 != pdf.data_ptr)
+  {
+    printf("Failed SEEK_CUR, expected data_ptr value of %lu", (size_t)pdf.data_ptr);
+    return (1);
+  }
+
+  // Test SEEK_CUR beyond end
+  result = lseek_mem(&pdf, data_len, SEEK_CUR);
+  if(data_len != result)
+  {
+    printf("Failed SEEK_CUR beyond end of data, expected %lu, got %d", data_len, result);
+    return (1);
+  };
+
+  if(pdf.data_end != pdf.data_ptr)
+  {
+    printf("Failed SEEK_CUR beyond end of data, expected data_ptr value of%lu, got %lu", (size_t)pdf.data_end, (size_t)pdf.data_ptr);
+    return (1);
+  };
+
+  // Test SEEK_END
+  result = lseek_mem(&pdf, -5, SEEK_END);
+  if(data_len - 5 != result)
+  {
+    printf("Failed SEEK_END, expected offset of 15, got %d", result);
+    return (1);
+  };
+
+  if(pdf.data_end - 5 != pdf.data_ptr)
+  {
+    printf("Failed SEEK_END, expected data_ptr value of %lu", (size_t)pdf.data_ptr);
+    return (1);
+  }
+
+  // Test SEEK_END beyond start
+  result = lseek_mem(&pdf, -data_len - 10, SEEK_END);
+  if(0 != result)
+  {
+    printf("Failed SEEK_END beyond start of data, expected 0, got %d", result);
+    return (1);
+  };
+
+  if(pdf.data != pdf.data_ptr)
+  {
+    printf("Failed SEEK_END beyond start of data, expected data_ptr value of%lu, got %lu", (size_t)pdf.data, (size_t)pdf.data_ptr);
+    return (1);
+  };
+
+  return (0);
+}
 
 //
 // 'do_unit_tests()' - Do unit tests.
@@ -3572,6 +3831,12 @@ write_unit_file(
   // Close the new PDF file...
   printf("pdfioFileClose(\"%s\"): ", outname);
   if (pdfioFileClose(outpdf))
+    puts("PASS");
+  else
+    return (1);
+
+  printf("lseek_mem_test\n");
+  if (lseek_mem_test() == 0)
     puts("PASS");
   else
     return (1);

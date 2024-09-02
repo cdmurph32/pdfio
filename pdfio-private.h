@@ -254,8 +254,8 @@ struct _pdfio_file_s			// PDF file structure
 		*bufend;		// End of buffer
   off_t		bufpos;			// Position in file for start of buffer
   // In memory pdf data
-  char		*data_ptr,		// Pointer into in-memory pdf
-		*data,			// Pointer to in-memory pdf
+  char		*data,			// In memory PDF
+		*data_ptr,		// Pointer into in-memory pdf
 		*data_end;		// End of in-memory pdf
   pdfio_dict_t	*trailer_dict;		// Trailer dictionary
   pdfio_obj_t	*root_obj;		// Root object/dictionary
@@ -407,6 +407,9 @@ extern void		_pdfioValueDebug(_pdfio_value_t *v, FILE *fp) _PDFIO_INTERNAL;
 extern void		_pdfioValueDelete(_pdfio_value_t *v) _PDFIO_INTERNAL;
 extern _pdfio_value_t	*_pdfioValueRead(pdfio_file_t *pdf, pdfio_obj_t *obj, _pdfio_token_t *ts, _pdfio_value_t *v, size_t depth) _PDFIO_INTERNAL;
 extern bool		_pdfioValueWrite(pdfio_file_t *pdf, pdfio_obj_t *obj, _pdfio_value_t *v, off_t *length) _PDFIO_INTERNAL;
+
+extern off_t	        lseek_mem(pdfio_file_t *pdf, off_t offset, int whence);
+extern void		print_trace() _PDFIO_INTERNAL;
 
 
 #endif // !PDFIO_PRIVATE_H

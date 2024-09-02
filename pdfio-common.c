@@ -8,7 +8,9 @@
 //
 
 #include "pdfio-private.h"
+#include <stdio.h>
 #include <string.h>
+//#include <execinfo.h>
 
 
 //
@@ -19,6 +21,8 @@ static bool	fill_buffer(pdfio_file_t *pdf);
 static ssize_t	read_buffer(pdfio_file_t *pdf, char *buffer, size_t bytes);
 static ssize_t	read_buffer_from_memory(pdfio_file_t *pdf, char *buffer, size_t bytes);
 static bool	write_buffer(pdfio_file_t *pdf, const void *buffer, size_t bytes);
+static off_t    max(off_t a, off_t b);
+static off_t    min(off_t a, off_t b);
 
 
 //
@@ -143,7 +147,7 @@ _pdfioFileGets(pdfio_file_t *pdf,	// I - PDF file
 	*bufend = buffer + bufsize - 1;	// Pointer to end of buffer
 
 
-  PDFIO_DEBUG("_pdfioFileGets(pdf=%p, buffer=%p, bufsize=%lu) bufpos=%ld, buffer=%p, bufptr=%p, bufend=%p, offset=%lu\n", pdf, buffer, (unsigned long)bufsize, (long)pdf->bufpos, pdf->buffer, pdf->bufptr, pdf->bufend, (unsigned long)(pdf->bufpos + (pdf->bufptr - pdf->buffer)));
+  printf("_pdfioFileGets(pdf=%p, buffer=%p, bufsize=%lu) bufpos=%ld, buffer=%p, bufptr=%p, bufend=%p, offset=%lu\n", pdf, buffer, (unsigned long)bufsize, (long)pdf->bufpos, pdf->buffer, pdf->bufptr, pdf->bufend, (unsigned long)(pdf->bufpos + (pdf->bufptr - pdf->buffer)));
 
   while (!eol)
   {
@@ -215,16 +219,28 @@ _pdfioFilePeek(pdfio_file_t *pdf,	// I - PDF file
     // Yes, try reading more...
     ssize_t	rbytes;			// Bytes read
 
-    PDFIO_DEBUG("_pdfioFilePeek: Sliding buffer, total=%ld\n", (long)total);
+    printf("_pdfioFilePeek: Sliding buffer, total=%ld\n", (long)total);
 
     memmove(pdf->buffer, pdf->bufptr, total);
     pdf->bufpos += pdf->bufptr - pdf->buffer;
     pdf->bufptr = pdf->buffer;
     pdf->bufend = pdf->buffer + total;
 
+    printf("_pdfioFilePeek reading %lu bytes, \n", sizeof(pdf->buffer) - (size_t)total);
+    // Read from in memory PDF if file descriptor is 0.
     if (pdf->fd == 0)
     {
-      rbytes = read_buffer_from_memory(pdf, pdf->bufend, sizeof(pdf->buffer));
+      size_t remaining = pdf->data_end - pdf->data_ptr;
+      size_t to_copy = (remaining < sizeof(pdf->buffer) - total) ? remaining : (sizeof(pdf->buffer) - total);
+      if (to_copy > 0)
+      {
+        memcpy(pdf->bufend, pdf->data_ptr, to_copy);
+        pdf->data_ptr += to_copy;
+        rbytes = to_copy;
+      } else
+      {
+        rbytes = 0;
+      }
     } else
     {
       // Read until we have bytes or a non-recoverable error...
@@ -235,6 +251,7 @@ _pdfioFilePeek(pdfio_file_t *pdf,	// I - PDF file
       }
     }
 
+    printf("_pdfioFilePeek rbytes %lu\n", rbytes);
     if (rbytes > 0)
     {
       // Expand the buffer...
@@ -364,12 +381,7 @@ _pdfioFileSeek(pdfio_file_t *pdf,	// I - PDF file
                off_t        offset,	// I - Offset
                int          whence)	// I - Offset base
 {
-  if (pdf->fd == 0) {
-    PDFIO_DEBUG("_pdfioFileSeek with no file");
-    return -1;
-  }
-
-  PDFIO_DEBUG("_pdfioFileSeek(pdf=%p, offset=%ld, whence=%d) pdf->bufpos=%lu\n", pdf, (long)offset, whence, (unsigned long)(pdf ? pdf->bufpos : 0));
+  printf("_pdfioFileSeek(pdf=%p, offset=%ld, whence=%d) pdf->bufpos=%lu\n", pdf, (long)offset, whence, (unsigned long)(pdf ? pdf->bufpos : 0));
 
   // Adjust offset for relative seeks...
   if (whence == SEEK_CUR)
@@ -411,16 +423,29 @@ _pdfioFileSeek(pdfio_file_t *pdf,	// I - PDF file
   }
 
   // Seek within the file...
-  if ((offset = lseek(pdf->fd, offset, whence)) < 0)
+  if (pdf->fd == 0)
+  {
+    offset = lseek_mem(pdf, offset, whence);
+    if (offset < 0)
+    {
+      _pdfioFileError(pdf, "Unable to seek within memory file - %s", strerror(errno));
+      return (-1);
+    }
+  } else if ((offset = lseek(pdf->fd, offset, whence)) < 0)
   {
     _pdfioFileError(pdf, "Unable to seek within file - %s", strerror(errno));
     return (-1);
   }
 
-  PDFIO_DEBUG("_pdfioFileSeek: Reset bufpos=%ld, offset=%lu.\n", (long)pdf->bufpos, (unsigned long)offset);
-  PDFIO_DEBUG("_pdfioFileSeek: buffer=%p, bufptr=%p, bufend=%p\n", pdf->buffer, pdf->bufptr, pdf->bufend);
+  printf("_pdfioFileSeek: Reset bufpos=%ld, offset=%lu.\n", (long)pdf->bufpos, (unsigned long)offset);
+  printf("_pdfioFileSeek: buffer=%p, bufptr=%p, bufend=%p\n", pdf->buffer, pdf->bufptr, pdf->bufend);
 
   pdf->bufpos = offset;
+  printf("Returning offset %ld\n", offset);
+  for (int i = 0; i < 10; i++) {
+      printf("'%c' (%d) ", pdf->buffer[i], pdf->buffer[i]);
+  }
+  printf("\n");
 
   return (offset);
 }
@@ -433,9 +458,7 @@ _pdfioFileSeek(pdfio_file_t *pdf,	// I - PDF file
 off_t					// O - Offset from beginning of file
 _pdfioFileTell(pdfio_file_t *pdf)	// I - PDF file
 {
-  if (pdf->fd == 0) {
-    return (pdf->bufend - pdf->bufptr);
-  } else if (pdf->bufptr)
+  if (pdf->bufptr)
     return (pdf->bufpos + (pdf->bufptr - pdf->buffer));
   else
     return (pdf->bufpos);
@@ -520,10 +543,12 @@ read_buffer_from_memory(pdfio_file_t *pdf,	// I - PDF file
   ssize_t	rbytes;			// Bytes read...
 
   rbytes = pdf->data_end - pdf->data_ptr;
-  if (rbytes > bytes) {
+  if (rbytes > bytes)
+  {
     memcpy(pdf->buffer, pdf->data_ptr, bytes);
     return bytes;
-  } else if (rbytes > 0) {
+  } else if (rbytes > 0)
+  {
     memcpy(pdf->buffer, pdf->data_ptr, rbytes);
   }
   return rbytes;
@@ -541,16 +566,19 @@ read_buffer(pdfio_file_t *pdf,		// I - PDF file
 {
   ssize_t	rbytes;			// Bytes read...
 
-  if (pdf->fd == 0) {
-    return read_buffer_from_memory(pdf, buffer, bytes);
-  }
-
-  // Read from the file...
-  while ((rbytes = read(pdf->fd, buffer, bytes)) < 0)
+  if (pdf->fd == 0)
   {
-    // Stop if we have an error that shouldn't be retried...
-    if (errno != EINTR && errno != EAGAIN)
-      break;
+    rbytes = read_buffer_from_memory(pdf, buffer, bytes);
+  } else
+  {
+
+    // Read from the file...
+    while ((rbytes = read(pdf->fd, buffer, bytes)) < 0)
+    {
+      // Stop if we have an error that shouldn't be retried...
+      if (errno != EINTR && errno != EAGAIN)
+        break;
+    }
   }
 
   if (rbytes < 0)
@@ -614,3 +642,83 @@ write_buffer(pdfio_file_t *pdf,		// I - PDF file
 
   return (true);
 }
+
+static off_t
+max(off_t a, off_t b) {
+    return (a > b) ? a : b;
+}
+
+static off_t
+min(off_t a, off_t b) {
+    return (a > b) ? b : a;
+}
+
+/*
+off_t
+lseek_mem(pdfio_file_t *pdf, off_t offset, int whence) {
+  off_t ret = 0;
+  off_t data_len = pdf->data_end - pdf->data;
+
+  if (whence == SEEK_SET)
+  {
+    ret = min(offset, data_len);
+  } else if (whence == SEEK_CUR)
+  {
+    ret = min((off_t)pdf->data_ptr + offset, data_len);
+  } else if (whence == SEEK_END) {
+    ret = max(data_len+offset, pdf->data);
+  }
+  pdf->data_ptr = pdf->data + ret;
+  return ret;
+}
+*/
+off_t lseek_mem(pdfio_file_t *pdf, off_t offset, int whence) {
+    off_t new_offset;
+    off_t current_offset = pdf->data_ptr - pdf->data;
+    off_t data_len = pdf->data_end - pdf->data;
+
+    switch (whence) {
+        case SEEK_SET:
+            new_offset = offset;
+            break;
+        case SEEK_CUR:
+            new_offset = current_offset + offset;
+            break;
+        case SEEK_END:
+            new_offset = data_len + offset;
+            break;
+        default:
+            return -1;  // Invalid whence
+    }
+
+    // Clamp the new offset to valid range
+    if (new_offset < 0) {
+        new_offset = 0;
+    } else if (new_offset > data_len) {
+        new_offset = data_len;
+    }
+
+    // Update the data pointer
+    pdf->data_ptr = pdf->data + new_offset;
+
+    return new_offset;
+}
+
+/*
+void print_trace() {
+    void *array[10];
+    int size;
+    char **strings;
+
+    size = backtrace(array, 10);
+    strings = backtrace_symbols(array, size);
+
+    if (strings != NULL) {
+        printf("Obtained %d stack frames:\n", size);
+        for (int i = 0; i < size; i++) {
+            printf("%s\n", strings[i]);
+        }
+        free(strings);
+    }
+}
+*/
