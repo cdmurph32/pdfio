@@ -408,7 +408,7 @@ extern void		_pdfioValueDelete(_pdfio_value_t *v) _PDFIO_INTERNAL;
 extern _pdfio_value_t	*_pdfioValueRead(pdfio_file_t *pdf, pdfio_obj_t *obj, _pdfio_token_t *ts, _pdfio_value_t *v, size_t depth) _PDFIO_INTERNAL;
 extern bool		_pdfioValueWrite(pdfio_file_t *pdf, pdfio_obj_t *obj, _pdfio_value_t *v, off_t *length) _PDFIO_INTERNAL;
 
-extern off_t	        lseek_mem(pdfio_file_t *pdf, off_t offset, int whence);
+extern off_t	        lseekMem(pdfio_file_t *pdf, off_t offset, int whence);
 extern void		print_trace() _PDFIO_INTERNAL;
 
 

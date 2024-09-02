@@ -21,8 +21,6 @@ static bool	fill_buffer(pdfio_file_t *pdf);
 static ssize_t	read_buffer(pdfio_file_t *pdf, char *buffer, size_t bytes);
 static ssize_t	read_buffer_from_memory(pdfio_file_t *pdf, char *buffer, size_t bytes);
 static bool	write_buffer(pdfio_file_t *pdf, const void *buffer, size_t bytes);
-static off_t    max(off_t a, off_t b);
-static off_t    min(off_t a, off_t b);
 
 
 //
@@ -147,7 +145,7 @@ _pdfioFileGets(pdfio_file_t *pdf,	// I - PDF file
 	*bufend = buffer + bufsize - 1;	// Pointer to end of buffer
 
 
-  printf("_pdfioFileGets(pdf=%p, buffer=%p, bufsize=%lu) bufpos=%ld, buffer=%p, bufptr=%p, bufend=%p, offset=%lu\n", pdf, buffer, (unsigned long)bufsize, (long)pdf->bufpos, pdf->buffer, pdf->bufptr, pdf->bufend, (unsigned long)(pdf->bufpos + (pdf->bufptr - pdf->buffer)));
+  PDFIO_DEBUG("_pdfioFileGets(pdf=%p, buffer=%p, bufsize=%lu) bufpos=%ld, buffer=%p, bufptr=%p, bufend=%p, offset=%lu\n", pdf, buffer, (unsigned long)bufsize, (long)pdf->bufpos, pdf->buffer, pdf->bufptr, pdf->bufend, (unsigned long)(pdf->bufpos + (pdf->bufptr - pdf->buffer)));
 
   while (!eol)
   {
@@ -219,15 +217,14 @@ _pdfioFilePeek(pdfio_file_t *pdf,	// I - PDF file
     // Yes, try reading more...
     ssize_t	rbytes;			// Bytes read
 
-    printf("_pdfioFilePeek: Sliding buffer, total=%ld\n", (long)total);
+    PDFIO_DEBUG("_pdfioFilePeek: Sliding buffer, total=%ld\n", (long)total);
 
     memmove(pdf->buffer, pdf->bufptr, total);
     pdf->bufpos += pdf->bufptr - pdf->buffer;
     pdf->bufptr = pdf->buffer;
     pdf->bufend = pdf->buffer + total;
 
-    printf("_pdfioFilePeek reading %lu bytes, \n", sizeof(pdf->buffer) - (size_t)total);
-    // Read from in memory PDF if file descriptor is 0.
+    // Read from in-memory PDF if file descriptor is 0.
     if (pdf->fd == 0)
     {
       size_t remaining = pdf->data_end - pdf->data_ptr;
@@ -251,7 +248,6 @@ _pdfioFilePeek(pdfio_file_t *pdf,	// I - PDF file
       }
     }
 
-    printf("_pdfioFilePeek rbytes %lu\n", rbytes);
     if (rbytes > 0)
     {
       // Expand the buffer...
@@ -381,7 +377,7 @@ _pdfioFileSeek(pdfio_file_t *pdf,	// I - PDF file
                off_t        offset,	// I - Offset
                int          whence)	// I - Offset base
 {
-  printf("_pdfioFileSeek(pdf=%p, offset=%ld, whence=%d) pdf->bufpos=%lu\n", pdf, (long)offset, whence, (unsigned long)(pdf ? pdf->bufpos : 0));
+  PDFIO_DEBUG("_pdfioFileSeek(pdf=%p, offset=%ld, whence=%d) pdf->bufpos=%lu\n", pdf, (long)offset, whence, (unsigned long)(pdf ? pdf->bufpos : 0));
 
   // Adjust offset for relative seeks...
   if (whence == SEEK_CUR)
@@ -423,9 +419,10 @@ _pdfioFileSeek(pdfio_file_t *pdf,	// I - PDF file
   }
 
   // Seek within the file...
+    // Read from in-memory PDF if file descriptor is 0.
   if (pdf->fd == 0)
   {
-    offset = lseek_mem(pdf, offset, whence);
+    offset = lseekMem(pdf, offset, whence);
     if (offset < 0)
     {
       _pdfioFileError(pdf, "Unable to seek within memory file - %s", strerror(errno));
@@ -437,15 +434,10 @@ _pdfioFileSeek(pdfio_file_t *pdf,	// I - PDF file
     return (-1);
   }
 
-  printf("_pdfioFileSeek: Reset bufpos=%ld, offset=%lu.\n", (long)pdf->bufpos, (unsigned long)offset);
-  printf("_pdfioFileSeek: buffer=%p, bufptr=%p, bufend=%p\n", pdf->buffer, pdf->bufptr, pdf->bufend);
+  PDFIO_DEBUG("_pdfioFileSeek: Reset bufpos=%ld, offset=%lu.\n", (long)pdf->bufpos, (unsigned long)offset);
+  PDFIO_DEBUG("_pdfioFileSeek: buffer=%p, bufptr=%p, bufend=%p\n", pdf->buffer, pdf->bufptr, pdf->bufend);
 
   pdf->bufpos = offset;
-  printf("Returning offset %ld\n", offset);
-  for (int i = 0; i < 10; i++) {
-      printf("'%c' (%d) ", pdf->buffer[i], pdf->buffer[i]);
-  }
-  printf("\n");
 
   return (offset);
 }
@@ -566,6 +558,7 @@ read_buffer(pdfio_file_t *pdf,		// I - PDF file
 {
   ssize_t	rbytes;			// Bytes read...
 
+  // Read from in-memory PDF if file descriptor is 0.
   if (pdf->fd == 0)
   {
     rbytes = read_buffer_from_memory(pdf, buffer, bytes);
@@ -643,36 +636,14 @@ write_buffer(pdfio_file_t *pdf,		// I - PDF file
   return (true);
 }
 
-static off_t
-max(off_t a, off_t b) {
-    return (a > b) ? a : b;
-}
 
-static off_t
-min(off_t a, off_t b) {
-    return (a > b) ? b : a;
-}
-
-/*
-off_t
-lseek_mem(pdfio_file_t *pdf, off_t offset, int whence) {
-  off_t ret = 0;
-  off_t data_len = pdf->data_end - pdf->data;
-
-  if (whence == SEEK_SET)
-  {
-    ret = min(offset, data_len);
-  } else if (whence == SEEK_CUR)
-  {
-    ret = min((off_t)pdf->data_ptr + offset, data_len);
-  } else if (whence == SEEK_END) {
-    ret = max(data_len+offset, pdf->data);
-  }
-  pdf->data_ptr = pdf->data + ret;
-  return ret;
-}
-*/
-off_t lseek_mem(pdfio_file_t *pdf, off_t offset, int whence) {
+//
+// 'lseekMem()' - Read a buffer from a PDF file.
+//
+off_t lseekMem(pdfio_file_t *pdf,       // I - PDF file
+               off_t offset,            // I - Offset
+               int whence)              // I - lseek whence directive
+{
     off_t new_offset;
     off_t current_offset = pdf->data_ptr - pdf->data;
     off_t data_len = pdf->data_end - pdf->data;

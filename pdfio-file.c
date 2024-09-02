@@ -1003,7 +1003,6 @@ pdfioMemBufOpen(
   }
 
   xref_offset = (off_t)strtol(ptr + 9, NULL, 10);
-  printf("Xref Offset %lu\n", xref_offset);
 
   if (!load_xref(pdf, xref_offset, password_cb, password_cbdata))
     goto error;

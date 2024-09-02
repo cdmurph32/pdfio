@@ -101,6 +101,7 @@ main(int  argc,				// I - Number of command-line arguments
       else if ((i + 1) < argc && isdigit(argv[i + 1][0] & 255))
       {
         // filename.pdf object-number
+        // TODO: run both test and in-memory tests
         if (do_in_memory_test_file(argv[i], atoi(argv[i + 1]), password, verbose))
 	  ret = 1;
 
@@ -667,7 +668,7 @@ do_in_memory_test_file(const char *filename,	// I - PDF filename
 }
 
 static int
-lseek_mem_test(void)
+lseekMem_test(void)
 {
   char test_data[] = "This is test data for PDF";
   size_t data_len = strlen(test_data);
@@ -678,7 +679,7 @@ lseek_mem_test(void)
   pdf.data_end = pdf.data + data_len;
 
   // Test SEEK_SET
-  result = lseek_mem(&pdf, 5, SEEK_SET);
+  result = lseekMem(&pdf, 5, SEEK_SET);
   if(result != 5)
   {
     printf("Failed SEEK_SET, expected offset of 5, got %d", result);
@@ -692,7 +693,7 @@ lseek_mem_test(void)
   }
 
   // Test SEEK_SET beyond end
-  result = lseek_mem(&pdf, data_len + 10, SEEK_SET);
+  result = lseekMem(&pdf, data_len + 10, SEEK_SET);
   if(data_len != result)
   {
     printf("Failed SEEK_SET beyond end of data, expected %lu, got %d", data_len, result);
@@ -707,7 +708,7 @@ lseek_mem_test(void)
 
   // Test SEEK_CUR
   pdf.data_ptr = pdf.data + 10;
-  result = lseek_mem(&pdf, 5, SEEK_CUR);
+  result = lseekMem(&pdf, 5, SEEK_CUR);
   if(15 != result)
   {
     printf("Failed SEEK_CUR, expected offset of 15, got %d", result);
@@ -721,7 +722,7 @@ lseek_mem_test(void)
   }
 
   // Test SEEK_CUR beyond end
-  result = lseek_mem(&pdf, data_len, SEEK_CUR);
+  result = lseekMem(&pdf, data_len, SEEK_CUR);
   if(data_len != result)
   {
     printf("Failed SEEK_CUR beyond end of data, expected %lu, got %d", data_len, result);
@@ -735,7 +736,7 @@ lseek_mem_test(void)
   };
 
   // Test SEEK_END
-  result = lseek_mem(&pdf, -5, SEEK_END);
+  result = lseekMem(&pdf, -5, SEEK_END);
   if(data_len - 5 != result)
   {
     printf("Failed SEEK_END, expected offset of 15, got %d", result);
@@ -749,7 +750,7 @@ lseek_mem_test(void)
   }
 
   // Test SEEK_END beyond start
-  result = lseek_mem(&pdf, -data_len - 10, SEEK_END);
+  result = lseekMem(&pdf, -data_len - 10, SEEK_END);
   if(0 != result)
   {
     printf("Failed SEEK_END beyond start of data, expected 0, got %d", result);
@@ -3835,8 +3836,8 @@ write_unit_file(
   else
     return (1);
 
-  printf("lseek_mem_test\n");
-  if (lseek_mem_test() == 0)
+  printf("lseekMem_test\n");
+  if (lseekMem_test() == 0)
     puts("PASS");
   else
     return (1);

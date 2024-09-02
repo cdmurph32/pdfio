@@ -318,14 +318,10 @@ _pdfioValueRead(pdfio_file_t   *pdf,	// I - PDF file
 #endif // DEBUG
 
 
-  printf("_pdfioValueRead(pdf=%p, obj=%p, v=%p)\n", pdf, obj, v);
+  PDFIO_DEBUG("_pdfioValueRead(pdf=%p, obj=%p, v=%p)\n", pdf, obj, v);
 
   if (!_pdfioTokenGet(tb, token, sizeof(token)))
-  {
-    printf("returning NULL");
     return (NULL);
-  }
-  printf("TOKEN: %s: ", token);
 
   if (!strcmp(token, "["))
   {
@@ -518,7 +514,6 @@ _pdfioValueRead(pdfio_file_t   *pdf,	// I - PDF file
   else
   {
     _pdfioFileError(pdf, "Unexpected '%s' token seen.", token);
-    print_trace();
     return (NULL);
   }
 
