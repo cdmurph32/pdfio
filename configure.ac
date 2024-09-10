@@ -269,5 +269,5 @@ AC_ARG_WITH([ldflags], AS_HELP_STRING([--with-ldflags=...], [Specify additional 
 
 
 dnl Generate the Makefile and pkg-config file...
-AC_CONFIG_FILES([Makefile pdfio.pc])
+AC_CONFIG_FILES([${srcdir}/Makefile ${srcdir}/pdfio.pc])
 AC_OUTPUT
