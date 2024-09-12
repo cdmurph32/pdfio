@@ -36,7 +36,7 @@ main()
 
 
   // Read file into memory
-  pdf_file = fopen("./testfiles/testpdfio.pdf", "r"); 
+  pdf_file = fopen("./test.pdf", "r");
   fseek(pdf_file, 0, SEEK_END);
   pdf_file_size = ftell(pdf_file);
   fseek(pdf_file, 0, SEEK_SET);
