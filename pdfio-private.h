@@ -7,6 +7,7 @@
 // information.
 //
 
+# define DEBUG
 #ifndef PDFIO_PRIVATE_H
 #  define PDFIO_PRIVATE_H
 #  ifdef _WIN32

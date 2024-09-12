@@ -20,8 +20,7 @@
 //
 
 int					// O - Exit status
-main(int  argc,				// I - Number of command-line arguments
-     char *argv[])			// I - Command-line arguments
+main()
 {
   pdfio_file_t	*file;			// PDF file
   size_t	i, j,			// Looping vars
@@ -29,19 +28,38 @@ main(int  argc,				// I - Number of command-line arguments
 		num_streams;		// Number of streams for page
   pdfio_obj_t	*obj;			// Current page object
   pdfio_stream_t *st;			// Current page content stream
-  char		buffer[1024];		// String buffer
+  char		buffer[1024],		// String buffer
+		*pdf_file_buffer;		// In memory PDF buffer
   bool		first;			// First string token?
+  FILE          *pdf_file;         // In memory PDF
+  size_t        pdf_file_size;     // In memory PDF size
 
 
-  // Verify command-line arguments...
-  if (argc != 2)
-  {
-    puts("Usage: pdfiototext FILENAME.pdf > FILENAME.txt");
-    return (1);
+  // Read file into memory
+  pdf_file = fopen("./testfiles/testpdfio.pdf", "r"); 
+  fseek(pdf_file, 0, SEEK_END);
+  pdf_file_size = ftell(pdf_file);
+  fseek(pdf_file, 0, SEEK_SET);
+  pdf_file_buffer = malloc(pdf_file_size + 1);
+
+  // Read file content into buffer
+  size_t read_size = fread(pdf_file_buffer, 1, pdf_file_size, pdf_file);
+  if (read_size != pdf_file_size) {
+      perror("In memory file read failed");
+      free(pdf_file_buffer);
+      fclose(pdf_file);
+      return 1;
   }
 
+  pdf_file_buffer[pdf_file_size] = '\0';
+
+  printf("file size %ld\n", pdf_file_size);
+
+  // Close the file
+  fclose(pdf_file);
+
   // Open the PDF file...
-  if ((file = pdfioFileOpen(argv[1], NULL, NULL, NULL, NULL)) == NULL)
+  if ((file = pdfioMemBufOpen(pdf_file_buffer, pdf_file_size, NULL, NULL, NULL, NULL)) == NULL)
     return (1);
 
 //  printf("%s: %u pages\n", argv[1], (unsigned)pdfioFileGetNumPages(file));

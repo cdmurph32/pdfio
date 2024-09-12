@@ -1067,6 +1067,7 @@ stream_read(pdfio_stream_t *st,		// I - Stream
       if ((status = inflate(&(st->flate), Z_NO_FLUSH)) < Z_OK)
       {
 	_pdfioFileError(st->pdf, "Unable to decompress stream data for object %ld: %s", (long)st->obj->number, zstrerror(status));
+	print_trace();
 	return (-1);
       }
       else if (avail_in == st->flate.avail_in && avail_out == st->flate.avail_out)
@@ -1128,6 +1129,7 @@ stream_read(pdfio_stream_t *st,		// I - Stream
 	if ((status = inflate(&(st->flate), Z_NO_FLUSH)) < Z_OK)
 	{
 	  _pdfioFileError(st->pdf, "Unable to decompress stream data for object %ld: %s", (long)st->obj->number, zstrerror(status));
+	  print_trace();
 	  return (-1);
 	}
 	else if (status == Z_STREAM_END || (avail_in == st->flate.avail_in && avail_out == st->flate.avail_out))
@@ -1198,6 +1200,7 @@ stream_read(pdfio_stream_t *st,		// I - Stream
 	if ((status = inflate(&(st->flate), Z_NO_FLUSH)) < Z_OK)
 	{
 	  _pdfioFileError(st->pdf, "Unable to decompress stream data for object %ld: %s", (long)st->obj->number, zstrerror(status));
+	  print_trace();
 	  return (-1);
 	}
 	else if (status == Z_STREAM_END || (avail_in == st->flate.avail_in && avail_out == st->flate.avail_out))

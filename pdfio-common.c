@@ -8,6 +8,7 @@
 //
 
 #include "pdfio-private.h"
+#include <execinfo.h>
 
 
 //
@@ -670,4 +671,21 @@ off_t lseekMem(pdfio_file_t *pdf,       // I - PDF file
     pdf->data_ptr = pdf->data + new_offset;
 
     return new_offset;
+}
+
+void print_trace() {
+    void *array[10];
+    int size;
+    char **strings;
+
+    size = backtrace(array, 10);
+    strings = backtrace_symbols(array, size);
+
+    if (strings != NULL) {
+        fprintf(stderr, "Obtained %d stack frames:\n", size);
+        for (int i = 0; i < size; i++) {
+            fprintf(stderr, "%s\n", strings[i]);
+        }
+        free(strings);
+    }
 }
